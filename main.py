@@ -37,6 +37,7 @@ class AnalysisOutput(BaseModel):
     categories: dict
     issues: list[Issue]
     suggestions: list[str]
+    formatted_output: str
 
 # --- Keyword mappings ---
 
@@ -180,6 +181,77 @@ def extract_suggestions(text: str) -> list[str]:
     
     return suggestions[:5]  # Limit to 5 suggestions
 
+def format_output(score: int, categories: dict, issues: list[Issue], suggestions: list[str]) -> str:
+    """Format the analysis output as markdown for better presentation."""
+    
+    # Score emoji based on value
+    if score >= 90:
+        score_emoji = "🌟"
+    elif score >= 75:
+        score_emoji = "✅"
+    elif score >= 60:
+        score_emoji = "⚠️"
+    else:
+        score_emoji = "🔴"
+    
+    output = f"# 📊 ANÁLISIS DE DISEÑO\n\n"
+    output += f"## {score_emoji} Score General: **{score}/100**\n\n"
+    
+    # Categories
+    output += "### 📈 Scores por Categoría\n\n"
+    category_names = {
+        "contrast": "🎨 Contraste",
+        "spacing": "📏 Espaciado",
+        "alignment": "📐 Alineación",
+        "hierarchy": "🏗️ Jerarquía"
+    }
+    
+    for key, value in categories.items():
+        name = category_names.get(key, key.title())
+        bar = "█" * (value // 10) + "░" * (10 - value // 10)
+        output += f"**{name}:** {bar} `{value}/100`\n"
+    
+    output += "\n"
+    
+    # Issues
+    if issues:
+        output += "### ⚠️ Issues Encontrados\n\n"
+        
+        critical = [i for i in issues if i.severity == "critical"]
+        warnings = [i for i in issues if i.severity == "warning"]
+        info = [i for i in issues if i.severity == "info"]
+        
+        if critical:
+            output += "#### 🔴 CRÍTICO\n"
+            for issue in critical:
+                output += f"- {issue.text}\n"
+            output += "\n"
+        
+        if warnings:
+            output += "#### ⚠️ ADVERTENCIAS\n"
+            for issue in warnings:
+                output += f"- {issue.text}\n"
+            output += "\n"
+        
+        if info:
+            output += "#### ℹ️ INFORMACIÓN\n"
+            for issue in info:
+                output += f"- {issue.text}\n"
+            output += "\n"
+    
+    # Suggestions
+    if suggestions:
+        output += "### 💡 Sugerencias de Mejora\n\n"
+        for i, suggestion in enumerate(suggestions, 1):
+            output += f"{i}. {suggestion}\n"
+        output += "\n"
+    
+    output += "---\n"
+    output += "*Análisis generado por Design Analysis API*"
+    
+    return output
+
+
 # --- Endpoints ---
 
 @app.get("/health")
@@ -206,11 +278,15 @@ async def analyze_text(input_data: AnalysisInput):
     # Extract suggestions
     suggestions = extract_suggestions(text)
     
+    # Generate formatted output
+    formatted = format_output(score, categories, issues, suggestions)
+    
     return AnalysisOutput(
         score=score,
         categories=categories,
         issues=issues,
-        suggestions=suggestions
+        suggestions=suggestions,
+        formatted_output=formatted
     )
 
 # Run with: uvicorn main:app --reload (for development)
